@@ -13,10 +13,10 @@ interface AddSampleEvent {
     filePayloadHash: string
 }
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchText(url: string): Promise<string> {
     const res = await fetch(url)
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`)
-    return res.json()
+    return res.text()
 }
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
@@ -30,14 +30,22 @@ export async function processEvent(rawData: string): Promise<void> {
     const swarmHash = rawData.startsWith('0x') ? rawData.slice(2) : rawData
 
     // Step 2: fetch AddSampleEvent
+    let eventText: string
+    try {
+        eventText = await withRetry(
+            `fetch event ${swarmHash}`,
+            () => fetchText(`${config.gatewayUrl}/bzz/${swarmHash}/`),
+        )
+    } catch (err) {
+        console.error(`[${swarmHash}] Failed to fetch event:`, err)
+        return
+    }
+
     let event: AddSampleEvent
     try {
-        event = await withRetry(
-            `fetch event ${swarmHash}`,
-            () => fetchJson(`${config.gatewayUrl}/bzz/${swarmHash}/`),
-        ) as AddSampleEvent
+        event = JSON.parse(eventText) as AddSampleEvent
     } catch (err) {
-        console.error(`[${swarmHash}] Failed to fetch event JSON:`, err)
+        console.error(`[${swarmHash}] Invalid JSON in event, skipping:`, err)
         return
     }
 
@@ -47,7 +55,13 @@ export async function processEvent(rawData: string): Promise<void> {
         return
     }
 
-    // Step 4: duplicate check
+    // Step 4: validate filePayloadHash
+    if (!/^[0-9a-f]{64}$/.test(event.filePayloadHash)) {
+        console.warn(`[${swarmHash}] Invalid filePayloadHash "${event.filePayloadHash}", skipping`)
+        return
+    }
+
+    // Step 5: duplicate check
     if (hasEntry(event.sampleName)) {
         console.warn(`[${swarmHash}] Sample "${event.sampleName}" already exists, skipping`)
         return
@@ -55,7 +69,7 @@ export async function processEvent(rawData: string): Promise<void> {
 
     console.log(`Processing sample "${event.sampleName}" (${event.filename})...`)
 
-    // Step 5: fetch audio bytes
+    // Step 6: fetch audio bytes
     let audioBytes: Uint8Array
     try {
         audioBytes = await withRetry(
@@ -67,12 +81,12 @@ export async function processEvent(rawData: string): Promise<void> {
         return
     }
 
-    // Step 6: save audio to disk
+    // Step 7: save audio to disk
     const ext = path.extname(event.filename)
     const localFilename = `${event.sampleName}-${Date.now()}${ext}`
     await writeFile(path.join('audio', localFilename), audioBytes)
 
-    // Step 7: upload audio to Swarm
+    // Step 8: upload audio to Swarm
     const contentType = contentTypeFromExt(ext)
     let audioRef: string
     try {
@@ -85,12 +99,12 @@ export async function processEvent(rawData: string): Promise<void> {
         return
     }
 
-    // Step 8: commit to local state
+    // Step 9: commit to local state
     const audioUrl = `${config.gatewayUrl}/bzz/${audioRef}/`
     addEntry(event.sampleName, audioUrl)
     console.log(`[${event.sampleName}] Committed to local state → ${audioUrl}`)
 
-    // Step 9: upload strudel.json
+    // Step 10: upload strudel.json
     let strudelRef: string
     try {
         strudelRef = await withRetry(
@@ -102,7 +116,7 @@ export async function processEvent(rawData: string): Promise<void> {
         return
     }
 
-    // Step 10: update feed
+    // Step 11: update feed
     try {
         await withRetry(
             `update feed (after ${event.sampleName})`,

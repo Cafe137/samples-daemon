@@ -26,11 +26,12 @@ export async function runSeed(): Promise<void> {
     const newState: State = {}
 
     try {
-        for (const file of audioFiles) {
-            const ext = path.extname(file).toLowerCase()
+        for (const originalFile of audioFiles) {
+            const file = originalFile.toLowerCase()
+            const ext = path.extname(file)
             const sampleName = path.basename(file, ext)
             const contentType = contentTypeFromExt(ext)
-            const bytes = new Uint8Array(await readFile(path.join(SEED_DIR, file)))
+            const bytes = new Uint8Array(await readFile(path.join(SEED_DIR, originalFile)))
 
             console.log(`  Uploading ${file}...`)
             const ref = await uploadFile(bytes, file, contentType)

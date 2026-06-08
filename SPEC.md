@@ -107,7 +107,7 @@ On startup, before beginning the polling loop, the service loads its local `stru
 5. Write the feed once via `feedWriter.upload(ZERO_BATCH_ID, strudelJsonReference)`. If this fails, abort startup
 6. Persist state to local `strudel.json` — only reached if all of the above succeeded
 
-Seeding is all-or-nothing: the local `strudel.json` is written only after every upload and the feed write have succeeded. If any step fails, ensure no local `strudel.json` exists before exiting — so the next startup re-enters the full seed.
+Seeding is all-or-nothing: the local `strudel.json` is written only after every upload and the feed write have succeeded. If any step fails, ensure no local `strudel.json` exists before exiting — so the next startup re-enters the full seed. Seed uploads are not retried; any failure aborts immediately.
 
 If the local `strudel.json` file exists, the seed step is skipped and the state is loaded from it.
 
@@ -119,18 +119,19 @@ Events are processed **strictly sequentially** — the next event is not started
 
 Network steps retry up to **3 times** with exponential backoff before giving up.
 
-**Self-healing:** local state is committed as soon as audio is safely on Swarm (step 8), before the strudel.json upload and feed update. If either of those later steps fails, the entry is already in local state. The next event processed will upload a strudel.json that includes all previously committed entries, and update the feed — automatically catching up any missed updates without manual intervention.
+**Self-healing:** local state is committed as soon as audio is safely on Swarm (step 9), before the strudel.json upload and feed update. If either of those later steps fails, the entry is already in local state. The next event processed will upload a strudel.json that includes all previously committed entries, and update the feed — automatically catching up any missed updates without manual intervention. There is no proactive or periodic retry; the feed is only brought current when the next event arrives.
 
 1. Extract `data` from the event — this is a `bytes32` value treated as a Swarm hash; strip the `0x` prefix before use in URLs
 2. Fetch `<GATEWAY_URL>/bzz/<data>/` — parse response body as JSON → `AddSampleEvent`
 3. Validate `type === 'add_sample'`; skip with a warning if not
-4. Check that `sampleName` does not already exist in the in-memory state; if it does, log a warning and skip — do not overwrite
-5. Fetch `<GATEWAY_URL>/bzz/<filePayloadHash>/` — audio file
-6. Derive file extension from `filename` field (e.g. `.wav`, `.mp3`, `.ogg`); save audio file to `audio/<sampleName>-<unixMillis>.<ext>` — timestamped filename ensures uniqueness across retries
-7. Upload audio to Swarm via `bee.uploadFile(postageBatchId, audioBytes, filename, { contentType })` — `audioBytes` are the bytes already in memory from step 5; content type derived from extension (`.wav` → `audio/wav`, `.mp3` → `audio/mpeg`, `.ogg` → `audio/ogg`); returns a reference. If all retries fail: log error and skip remaining steps — file remains on disk for manual recovery
-8. Add entry to in-memory state: `state[sampleName] = "<GATEWAY_URL>/bzz/<reference>/"` and persist to local `strudel.json` — audio is on Swarm at this point, so it is safe to commit
-9. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If all retries fail: log and skip remaining steps — local state is already updated and will be included in the next event's upload
-10. Update feed via `feedWriter.upload(ZERO_BATCH_ID, newStrudelJsonReference)`. If all retries fail: log — local state is already updated and the feed will be brought current on the next successful update
+4. Validate that `filePayloadHash` is exactly 64 lowercase hex characters; if not, log a warning and skip
+5. Check that `sampleName` does not already exist in the in-memory state; if it does, log a warning and skip — do not overwrite
+6. Fetch `<GATEWAY_URL>/bzz/<filePayloadHash>/` — audio file
+7. Derive file extension from `filename` field (e.g. `.wav`, `.mp3`, `.ogg`); save audio file to `audio/<sampleName>-<unixMillis>.<ext>` — timestamped filename ensures uniqueness across retries
+8. Upload audio to Swarm via `bee.uploadFile(ZERO_BATCH_ID, audioBytes, filename, { contentType })` — `audioBytes` are the bytes already in memory from step 6; content type derived from extension (`.wav` → `audio/wav`, `.mp3` → `audio/mpeg`, `.ogg` → `audio/ogg`); returns a reference. If all retries fail: log error and skip remaining steps — file remains on disk for manual recovery
+9. Add entry to in-memory state: `state[sampleName] = "<GATEWAY_URL>/bzz/<reference>/"` and persist to local `strudel.json` — audio is on Swarm at this point, so it is safe to commit
+10. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If all retries fail: log and skip remaining steps — local state is already updated and will be included in the next event's upload
+11. Update feed via `feedWriter.upload(ZERO_BATCH_ID, newStrudelJsonReference)`. If all retries fail: log — local state is already updated and the feed will be brought current on the next successful update
 
 ---
 
@@ -148,6 +149,8 @@ const signer = new PrivateKey(process.env.FEED_SIGNER_KEY)
 
 // Feed writer (no reader needed — state is maintained locally)
 const feedWriter = bee.makeFeedWriter(FEED_TOPIC, signer)
+
+// Use uploadReference (not the deprecated upload) to write a Swarm reference into the feed
 
 // Postage batch ID is not required when uploading via a gateway
 const ZERO_BATCH_ID = '0'.repeat(64)
@@ -167,6 +170,7 @@ All gateway fetches (steps 2 and 5 in the processing pipeline) use plain `fetch(
 | Feed update fails                       | Retry up to 3×, then log — local state already committed, feed self-heals on next successful update |
 | JSON parse error on `AddSampleEvent`    | Log and skip — not retried                              |
 | Unknown event type (not `add_sample`)   | Log and skip — not retried                              |
+| Invalid `filePayloadHash` (not 64 hex)  | Log and skip — not retried                              |
 | Duplicate `sampleName` in strudel.json  | Log and skip — not retried                              |
 | RPC poll error                          | Log, do not advance `last-block.txt`, retry next tick   |
 | `seed/` directory absent or empty at startup | Log and abort startup — do not begin polling       |

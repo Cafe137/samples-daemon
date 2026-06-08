@@ -17,8 +17,7 @@ export const bee = new Bee(config.gatewayUrl)
 
 const signer = new PrivateKey(config.feedSignerKey)
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const feedWriter = (bee as any).makeFeedWriter(config.feedTopic, signer)
+export const feedWriter = bee.makeFeedWriter(config.feedTopic, signer)
 
 export async function uploadFile(
     data: Uint8Array,
@@ -38,5 +37,5 @@ export async function uploadStrudelJson(state: Record<string, string>): Promise<
 }
 
 export async function updateFeed(reference: string): Promise<void> {
-    await feedWriter.upload(ZERO_BATCH_ID, reference)
+    await feedWriter.uploadReference(ZERO_BATCH_ID, reference)
 }
