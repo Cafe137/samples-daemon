@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+strudel.json
+last-block.txt
+audio/

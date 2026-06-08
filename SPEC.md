@@ -44,9 +44,7 @@ All configuration comes from a `.env` file (or environment variables):
 | Variable           | Required | Default                        | Description                                |
 |--------------------|----------|--------------------------------|--------------------------------------------|
 | `RPC_URL`          | No       | `https://rpc.gnosischain.com`  | Gnosis chain RPC endpoint                  |
-| `BEE_URL`          | Yes      | —                              | Bee node URL for uploads (e.g. `http://localhost:1633`) |
-| `GATEWAY_URL`      | No       | `https://bzz.limo`             | Swarm gateway for fetches and output URLs  |
-| `POSTAGE_BATCH_ID` | Yes      | —                              | Swarm postage stamp batch ID for uploads   |
+| `GATEWAY_URL`      | Yes      | —                              | Swarm gateway URL — used for both uploads (Bee node) and fetches/output URLs (e.g. `https://bzz.limo`) |
 | `FEED_SIGNER_KEY`  | Yes      | —                              | Private key (hex) used to sign feed updates — `0x` prefix optional |
 | `FEED_TOPIC`       | Yes      | —                              | Feed topic string                          |
 
@@ -100,13 +98,13 @@ All entries are absolute URLs: `<GATEWAY_URL>/bzz/<reference>/`. The app owns th
 
 ## Cold-start / seed
 
-On startup, before beginning the polling loop, the service loads its local `strudel.json` state file if present. If the file is absent (first run), the service performs a one-time seed:
+On startup, before beginning the polling loop, the service loads its local `strudel.json` state file if present. If the file is absent (first run), the service performs a one-time seed. If the `seed/` directory does not exist, or exists but contains no `.wav`/`.mp3`/`.ogg` files, abort startup entirely.
 
 1. Read all audio files from the `seed/` directory (`.wav`, `.mp3`, `.ogg`)
-2. Upload every file via `bee.uploadFile(postageBatchId, fileBytes, filename, { contentType })` — content type derived from extension. If any upload fails, abort startup entirely
+2. Upload every file via `bee.uploadFile(ZERO_BATCH_ID, fileBytes, filename, { contentType })` — content type derived from extension. If any upload fails, abort startup entirely
 3. Build an initial state object with one entry per file: `sampleName` (filename without extension) → `<GATEWAY_URL>/bzz/<reference>/`
-4. Upload `strudel.json` to Swarm via `bee.uploadFile(postageBatchId, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If this fails, abort startup
-5. Write the feed once via `feedWriter.upload(postageBatchId, strudelJsonReference)`. If this fails, abort startup
+4. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If this fails, abort startup
+5. Write the feed once via `feedWriter.upload(ZERO_BATCH_ID, strudelJsonReference)`. If this fails, abort startup
 6. Persist state to local `strudel.json` — only reached if all of the above succeeded
 
 Seeding is all-or-nothing: the local `strudel.json` is written only after every upload and the feed write have succeeded. If any step fails, ensure no local `strudel.json` exists before exiting — so the next startup re-enters the full seed.
@@ -131,8 +129,8 @@ Network steps retry up to **3 times** with exponential backoff before giving up.
 6. Derive file extension from `filename` field (e.g. `.wav`, `.mp3`, `.ogg`); save audio file to `audio/<sampleName>-<unixMillis>.<ext>` — timestamped filename ensures uniqueness across retries
 7. Upload audio to Swarm via `bee.uploadFile(postageBatchId, audioBytes, filename, { contentType })` — `audioBytes` are the bytes already in memory from step 5; content type derived from extension (`.wav` → `audio/wav`, `.mp3` → `audio/mpeg`, `.ogg` → `audio/ogg`); returns a reference. If all retries fail: log error and skip remaining steps — file remains on disk for manual recovery
 8. Add entry to in-memory state: `state[sampleName] = "<GATEWAY_URL>/bzz/<reference>/"` and persist to local `strudel.json` — audio is on Swarm at this point, so it is safe to commit
-9. Upload `strudel.json` to Swarm via `bee.uploadFile(postageBatchId, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If all retries fail: log and skip remaining steps — local state is already updated and will be included in the next event's upload
-10. Update feed via `feedWriter.upload(postageBatchId, newStrudelJsonReference)`. If all retries fail: log — local state is already updated and the feed will be brought current on the next successful update
+9. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If all retries fail: log and skip remaining steps — local state is already updated and will be included in the next event's upload
+10. Update feed via `feedWriter.upload(ZERO_BATCH_ID, newStrudelJsonReference)`. If all retries fail: log — local state is already updated and the feed will be brought current on the next successful update
 
 ---
 
@@ -143,13 +141,16 @@ Library: `@ethersphere/bee-js` v12.2.1
 ```typescript
 import { Bee, PrivateKey } from '@ethersphere/bee-js'
 
-const bee = new Bee(process.env.BEE_URL)
+const bee = new Bee(process.env.GATEWAY_URL)
 
 // FEED_SIGNER_KEY accepted with or without 0x prefix
 const signer = new PrivateKey(process.env.FEED_SIGNER_KEY)
 
 // Feed writer (no reader needed — state is maintained locally)
 const feedWriter = bee.makeFeedWriter(FEED_TOPIC, signer)
+
+// Postage batch ID is not required when uploading via a gateway
+const ZERO_BATCH_ID = '0'.repeat(64)
 ```
 
 All gateway fetches (steps 2 and 5 in the processing pipeline) use plain `fetch()` against `GATEWAY_URL` via the `/bzz/` endpoint — not the Bee node — to avoid depending on the local node having the data.
@@ -168,6 +169,7 @@ All gateway fetches (steps 2 and 5 in the processing pipeline) use plain `fetch(
 | Unknown event type (not `add_sample`)   | Log and skip — not retried                              |
 | Duplicate `sampleName` in strudel.json  | Log and skip — not retried                              |
 | RPC poll error                          | Log, do not advance `last-block.txt`, retry next tick   |
+| `seed/` directory absent or empty at startup | Log and abort startup — do not begin polling       |
 | Seed upload fails                       | Log and abort startup — do not begin polling            |
 
 ---
