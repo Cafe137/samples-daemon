@@ -13,7 +13,7 @@ export function contentTypeFromExt(ext: string): string {
 
 const ZERO_BATCH_ID = '0'.repeat(64)
 
-export const bee = new Bee(config.gatewayUrl)
+export const bee = new Bee(config.gatewayUrl, { timeout: 60_000 })
 
 const signer = new PrivateKey(config.feedSignerKey)
 

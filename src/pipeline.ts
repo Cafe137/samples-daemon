@@ -13,14 +13,16 @@ interface AddSampleEvent {
     filePayloadHash: string
 }
 
+const FETCH_TIMEOUT_MS = 30_000
+
 async function fetchText(url: string): Promise<string> {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`)
     return res.text()
 }
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`)
     return new Uint8Array(await res.arrayBuffer())
 }

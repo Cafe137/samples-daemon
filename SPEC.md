@@ -173,6 +173,19 @@ All gateway fetches (steps 2 and 5 in the processing pipeline) use plain `fetch(
 
 ---
 
+## Timeouts
+
+All outbound network requests must have an explicit timeout — no request may hang indefinitely.
+
+| Request type                              | Timeout  |
+|-------------------------------------------|----------|
+| `fetch()` — event JSON from gateway       | 30 s     |
+| `fetch()` — audio bytes from gateway      | 30 s     |
+| Bee uploads and feed operations (bee-js)  | 60 s     |
+| Viem JSON-RPC                             | 10 s (viem `http()` transport default) |
+
+---
+
 ## Error handling
 
 | Failure scenario                        | Behaviour                                               |
