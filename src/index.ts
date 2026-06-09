@@ -4,6 +4,11 @@ import { runSeed } from './seed.js'
 import { processEvent } from './pipeline.js'
 import { startPolling } from './indexer.js'
 
+const _log = console.log.bind(console)
+const _error = console.error.bind(console)
+console.log = (...args: unknown[]) => _log(new Date().toISOString(), ...args)
+console.error = (...args: unknown[]) => _error(new Date().toISOString(), ...args)
+
 async function main(): Promise<void> {
     mkdirSync('audio', { recursive: true })
 
