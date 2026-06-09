@@ -19,9 +19,6 @@ const signer = new PrivateKey(config.feedSignerKey)
 
 export const feedWriter = bee.makeFeedWriter(config.feedTopic, signer)
 
-console.log(`Feed owner: ${feedWriter.owner.toString()}`)
-console.log(`Feed topic: ${feedWriter.topic.toString()}`)
-
 export async function uploadFile(
     data: Uint8Array,
     filename: string,
@@ -41,4 +38,10 @@ export async function uploadStrudelJson(state: Record<string, string>): Promise<
 
 export async function updateFeed(reference: string): Promise<void> {
     await feedWriter.uploadReference(ZERO_BATCH_ID, reference)
+}
+
+export async function createFeedManifest(): Promise<string> {
+    const ownerAddress = signer.publicKey().address()
+    const reference = await bee.createFeedManifest(ZERO_BATCH_ID, config.feedTopic, ownerAddress)
+    return reference.toString()
 }

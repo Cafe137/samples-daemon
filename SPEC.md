@@ -96,6 +96,18 @@ All entries are absolute URLs: `<GATEWAY_URL>/bzz/<reference>/`. The app owns th
 
 ---
 
+## Startup initialisation
+
+On every startup, before the cold-start/seed step, the service calls `bee.createFeedManifest(ZERO_BATCH_ID, FEED_TOPIC, ownerAddress)` where `ownerAddress` is derived from the feed signer key (`signer.publicKey().address()`). The returned reference is printed to stdout:
+
+```
+Feed manifest address: <reference>
+```
+
+This manifest is a stable Swarm content-addressed chunk that resolves to the latest feed update, allowing anyone to fetch the current `strudel.json` via `GET /bzz/<feed-manifest-hash>/`. The manifest hash is deterministic for a given topic and owner — calling `createFeedManifest` multiple times is idempotent (the hash does not change). If the call fails, the error propagates and startup aborts.
+
+---
+
 ## Cold-start / seed
 
 On startup, before beginning the polling loop, the service loads its local `strudel.json` state file if present. If the file is absent (first run), the service performs a one-time seed. If the `seed/` directory does not exist, or exists but contains no `.wav`/`.mp3`/`.ogg` files, abort startup entirely.

@@ -3,6 +3,7 @@ import { loadState } from './state.js'
 import { runSeed } from './seed.js'
 import { processEvent } from './pipeline.js'
 import { startPolling } from './indexer.js'
+import { createFeedManifest } from './swarm.js'
 
 const _log = console.log.bind(console)
 const _error = console.error.bind(console)
@@ -11,6 +12,9 @@ console.error = (...args: unknown[]) => _error(new Date().toISOString(), ...args
 
 async function main(): Promise<void> {
     mkdirSync('audio', { recursive: true })
+
+    const feedManifest = await createFeedManifest()
+    console.log('Feed manifest address:', feedManifest)
 
     const hasState = loadState()
     if (!hasState) {
