@@ -19,6 +19,9 @@ const signer = new PrivateKey(config.feedSignerKey)
 
 export const feedWriter = bee.makeFeedWriter(config.feedTopic, signer)
 
+console.log(`Feed owner: ${feedWriter.owner.toString()}`)
+console.log(`Feed topic: ${feedWriter.topic.toString()}`)
+
 export async function uploadFile(
     data: Uint8Array,
     filename: string,
