@@ -22,7 +22,7 @@ User
   │
   └─3─▶ POST https://outbox.wtf/notify  { "data": "<eventHash>" }
             │
-            ├─ notify-pro-bono validates content at bzz.limo/bytes/<eventHash>
+            ├─ notify-pro-bono validates content at bzz.limo/bzz/<eventHash>/
             │   (must be JSON object with non-empty "signature" and "type" fields)
             │
             └─ calls notify(bytes32) on Gnosis contract — pays gas on user's behalf
@@ -77,7 +77,7 @@ The JSON uploaded to Swarm (step 2) must conform to:
 | Gas / wallet | Owns a funded wallet, pays gas | None |
 | Content validation | Checks `signature` + `type` exist | Full schema validation |
 | Spam / rate limiting | 10 req/min global sliding window | Deduplicates by `sampleName` |
-| Swarm interaction | Fetches via `/bytes/<hash>` (raw) | Fetches via `/bzz/<hash>/` (manifest), uploads via bee-js |
+| Swarm interaction | Fetches via `/bzz/<hash>/` (manifest) | Fetches via `/bzz/<hash>/` (manifest), uploads via bee-js |
 | Chain interaction | Writes (`notify`) | Reads (`Notification` events) |
 
 ---

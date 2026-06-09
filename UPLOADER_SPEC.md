@@ -23,7 +23,7 @@ Step 1 — Upload audio to Swarm
         │
         ▼
 Step 2 — Upload AddSampleEvent JSON to Swarm
-  POST https://bzz.limo/bytes
+  POST https://bzz.limo/bzz
   Content-Type: application/json
   Swarm-Postage-Batch-Id: 0000...000 (64 zeros)
   Body: AddSampleEvent JSON (see schema below)
@@ -109,13 +109,3 @@ On any error the form is re-enabled so the user can retry without reloading the 
 - **iframe sizing** — set `box-sizing: border-box`, `margin: 0`, and a fixed or `min-height` on `<body>` so the parent can embed it at a known size.
 - **CORS** — all three upstream endpoints (`bzz.limo`, `outbox.wtf`) must allow cross-origin requests from the Strudel origin. Verify before shipping; no workaround is available from a plain HTML page.
 
----
-
-## Required change in samples-manager
-
-notify-pro-bono fetches the event JSON via `GET https://bzz.limo/bytes/<hash>` (raw endpoint).
-samples-manager currently fetches it via `GET <GATEWAY_URL>/bzz/<hash>/` (manifest endpoint).
-
-Because the event JSON is uploaded via `POST /bytes` (step 2 above), the `/bzz/` fetch in samples-manager will not return the JSON — it will return Swarm manifest bytes instead.
-
-**Fix:** in `src/pipeline.ts` (or wherever step 2 of the processing pipeline is implemented), change the fetch URL for the `AddSampleEvent` from `/bzz/<data>/` to `/bytes/<data>`.
