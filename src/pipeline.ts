@@ -100,7 +100,7 @@ export async function processEvent(rawData: string): Promise<void> {
     }
 
     // Step 9: commit to local state
-    const audioUrl = `${config.gatewayUrl}/bzz/${audioRef}/`
+    const audioUrl = `/bzz/${audioRef}/`
     addEntry(event.sampleName, audioUrl)
     console.log(`[${event.sampleName}] Committed to local state → ${audioUrl}`)
 

@@ -70,12 +70,13 @@ Only events with `type === 'add_sample'` are processed. Others are logged and sk
 
 ```json
 {
-    "kick": "https://bzz.limo/bzz/<reference>/",
-    "snare": "https://bzz.limo/bzz/<reference>/"
+    "_base": "https://bzz.limo",
+    "kick": "/bzz/<reference>/",
+    "snare": "/bzz/<reference>/"
 }
 ```
 
-All entries are absolute URLs: `<GATEWAY_URL>/bzz/<reference>/`. The app owns the entire file from first creation — there is no `_base` field or pre-existing content.
+`_base` is always set to `https://bzz.limo`. Sample entries are relative paths under that base. The app owns the entire file from first creation.
 
 ---
 
@@ -114,7 +115,7 @@ On startup, before beginning the polling loop, the service loads its local `stru
 
 1. Read all audio files from the `seed/` directory (`.wav`, `.mp3`, `.ogg`)
 2. Upload every file via `bee.uploadFile(ZERO_BATCH_ID, fileBytes, filename, { contentType })` — content type derived from extension. If any upload fails, abort startup entirely
-3. Build an initial state object with one entry per file: `sampleName` (filename without extension) → `<GATEWAY_URL>/bzz/<reference>/`
+3. Build an initial state object with `_base` set to `https://bzz.limo` and one entry per file: `sampleName` (filename without extension) → `/bzz/<reference>/`
 4. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If this fails, abort startup
 5. Write the feed once via `feedWriter.upload(ZERO_BATCH_ID, strudelJsonReference)`. If this fails, abort startup
 6. Persist state to local `strudel.json` — only reached if all of the above succeeded
@@ -141,7 +142,7 @@ Network steps retry up to **3 times** with exponential backoff before giving up.
 6. Fetch `<GATEWAY_URL>/bzz/<filePayloadHash>/` — audio file
 7. Derive file extension from `filename` field (e.g. `.wav`, `.mp3`, `.ogg`); save audio file to `audio/<sampleName>-<unixMillis>.<ext>` — timestamped filename ensures uniqueness across retries
 8. Upload audio to Swarm via `bee.uploadFile(ZERO_BATCH_ID, audioBytes, filename, { contentType })` — `audioBytes` are the bytes already in memory from step 6; content type derived from extension (`.wav` → `audio/wav`, `.mp3` → `audio/mpeg`, `.ogg` → `audio/ogg`); returns a reference. If all retries fail: log error and skip remaining steps — file remains on disk for manual recovery
-9. Add entry to in-memory state: `state[sampleName] = "<GATEWAY_URL>/bzz/<reference>/"` and persist to local `strudel.json` — audio is on Swarm at this point, so it is safe to commit
+9. Add entry to in-memory state: `state[sampleName] = "/bzz/<reference>/"` and persist to local `strudel.json` — audio is on Swarm at this point, so it is safe to commit
 10. Upload `strudel.json` to Swarm via `bee.uploadFile(ZERO_BATCH_ID, jsonBytes, 'strudel.json', { contentType: 'application/json' })`. If all retries fail: log and skip remaining steps — local state is already updated and will be included in the next event's upload
 11. Update feed via `feedWriter.upload(ZERO_BATCH_ID, newStrudelJsonReference)`. If all retries fail: log — local state is already updated and the feed will be brought current on the next successful update
 

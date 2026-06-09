@@ -2,8 +2,7 @@ import { readdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import { uploadFile, uploadStrudelJson, updateFeed, contentTypeFromExt } from './swarm.js'
-import { config } from './config.js'
-import { setState, persistState, deleteStateFile } from './state.js'
+import { setState, persistState, deleteStateFile, DEFAULT_BASE } from './state.js'
 import type { State } from './state.js'
 
 const SEED_DIR = 'seed'
@@ -23,7 +22,7 @@ export async function runSeed(): Promise<void> {
 
     console.log(`Seeding ${audioFiles.length} file(s) from ${SEED_DIR}/...`)
 
-    const newState: State = {}
+    const newState: State = { _base: DEFAULT_BASE }
 
     try {
         for (const originalFile of audioFiles) {
@@ -35,7 +34,7 @@ export async function runSeed(): Promise<void> {
 
             console.log(`  Uploading ${file}...`)
             const ref = await uploadFile(bytes, file, contentType)
-            newState[sampleName] = `${config.gatewayUrl}/bzz/${ref}/`
+            newState[sampleName] = `/bzz/${ref}/`
             console.log(`  ${file} → ${ref}`)
         }
 

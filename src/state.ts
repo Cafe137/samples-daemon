@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
 
 const STATE_FILE = 'strudel.json'
 
+export const DEFAULT_BASE = 'https://bzz.limo'
+
 export type State = Record<string, string>
 
 let state: State = {}
