@@ -13,7 +13,7 @@ interface AddSampleEvent {
     filePayloadHash: string
 }
 
-const FETCH_TIMEOUT_MS = 30_000
+const FETCH_TIMEOUT_MS = 120_000
 
 async function fetchText(url: string): Promise<string> {
     const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
