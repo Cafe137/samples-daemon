@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { createPublicClient, http, parseAbiItem } from 'viem'
 import { gnosis } from 'viem/chains'
 import { config } from './config.js'
+import { fail, set } from './eye.js'
+import { kpis } from './kpis.js'
 
 const CONTRACT_ADDRESS = '0x5cDb55a64D5D5d8754398448D5a0e01098a57438' as const
 const DEPLOYMENT_BLOCK = 46507870n
@@ -35,6 +37,7 @@ export async function startPolling(
     processEvent: (data: string) => Promise<void>,
 ): Promise<void> {
     console.log('Starting blockchain indexer...')
+    set(kpis.lastBlock, Number(readLastBlock()) - 1)
 
     while (true) {
         try {
@@ -71,7 +74,9 @@ export async function startPolling(
             }
 
             writeLastBlock(toBlock + 1n)
+            set(kpis.lastBlock, Number(toBlock))
         } catch (err) {
+            fail(kpis.pollError, err)
             console.error('RPC poll error (will retry next tick):', err)
         }
 

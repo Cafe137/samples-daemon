@@ -24,6 +24,12 @@ export function setState(newState: State): void {
     state = newState
 }
 
+export function countSamples(value: State): number {
+    let count = 0
+    for (const key in value) if (key !== '_base') count++
+    return count
+}
+
 export function hasEntry(sampleName: string): boolean {
     return sampleName in state
 }

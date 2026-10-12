@@ -2,7 +2,9 @@ import { writeFile } from 'fs/promises'
 import path from 'path'
 import { withRetry } from './retry.js'
 import { config } from './config.js'
-import { hasEntry, addEntry, getState } from './state.js'
+import { hasEntry, addEntry, getState, countSamples } from './state.js'
+import { eventType, increment, seconds, set } from './eye.js'
+import { failFeed, kpis, rejectEvent } from './kpis.js'
 import { uploadFile, uploadStrudelJson, updateFeed, contentTypeFromExt } from './swarm.js'
 
 interface AddSampleEvent {
@@ -39,6 +41,7 @@ export async function processEvent(rawData: string): Promise<void> {
             () => fetchText(`${config.gatewayUrl}/bzz/${swarmHash}/`),
         )
     } catch (err) {
+        rejectEvent(swarmHash, err)
         console.error(`[${swarmHash}] Failed to fetch event:`, err)
         return
     }
@@ -47,24 +50,30 @@ export async function processEvent(rawData: string): Promise<void> {
     try {
         event = JSON.parse(eventText) as AddSampleEvent
     } catch (err) {
+        rejectEvent(swarmHash, err)
         console.error(`[${swarmHash}] Invalid JSON in event, skipping:`, err)
         return
     }
 
     // Step 3: validate type
-    if (event.type !== 'add_sample') {
-        console.warn(`[${swarmHash}] Unknown event type "${event.type}", skipping`)
+    const type = eventType(event)
+    if (type !== 'add_sample') {
+        if (type === null) rejectEvent(swarmHash, 'invalid event')
+        else increment(kpis.eventsForeign)
+        console.warn(`[${swarmHash}] Unknown event type "${type}", skipping`)
         return
     }
 
     // Step 4: validate filePayloadHash
     if (!/^[0-9a-f]{64}$/.test(event.filePayloadHash)) {
+        rejectEvent(swarmHash, 'invalid filePayloadHash')
         console.warn(`[${swarmHash}] Invalid filePayloadHash "${event.filePayloadHash}", skipping`)
         return
     }
 
     // Step 5: duplicate check
     if (hasEntry(event.sampleName)) {
+        rejectEvent(swarmHash, `sample "${event.sampleName}" already exists`)
         console.warn(`[${swarmHash}] Sample "${event.sampleName}" already exists, skipping`)
         return
     }
@@ -79,6 +88,7 @@ export async function processEvent(rawData: string): Promise<void> {
             () => fetchBytes(`${config.gatewayUrl}/bzz/${event.filePayloadHash}/`),
         )
     } catch (err) {
+        rejectEvent(swarmHash, err)
         console.error(`[${event.sampleName}] Failed to fetch audio:`, err)
         return
     }
@@ -97,6 +107,7 @@ export async function processEvent(rawData: string): Promise<void> {
             () => uploadFile(audioBytes, event.filename, contentType),
         )
     } catch (err) {
+        rejectEvent(swarmHash, err)
         console.error(`[${event.sampleName}] Failed to upload audio to Swarm:`, err)
         return
     }
@@ -104,6 +115,11 @@ export async function processEvent(rawData: string): Promise<void> {
     // Step 9: commit to local state
     const audioUrl = `/bzz/${audioRef}/`
     addEntry(event.sampleName, audioUrl)
+    const published = countSamples(getState())
+    increment(kpis.eventsAccepted)
+    set(kpis.samples, published)
+    set(kpis.lastSampleAt, seconds())
+    set(kpis.lastSample, event.sampleName)
     console.log(`[${event.sampleName}] Committed to local state → ${audioUrl}`)
 
     // Step 10: upload strudel.json
@@ -114,6 +130,7 @@ export async function processEvent(rawData: string): Promise<void> {
             () => uploadStrudelJson(getState()),
         )
     } catch (err) {
+        failFeed(err)
         console.error(`[${event.sampleName}] Failed to upload strudel.json — will self-heal on next event:`, err)
         return
     }
@@ -124,8 +141,12 @@ export async function processEvent(rawData: string): Promise<void> {
             `update feed (after ${event.sampleName})`,
             () => updateFeed(strudelRef),
         )
+        set(kpis.feedPublishedAt, seconds())
+        set(kpis.feedReference, strudelRef)
+        set(kpis.feedSamples, published)
         console.log(`[${event.sampleName}] Feed updated → ${strudelRef}`)
     } catch (err) {
+        failFeed(err)
         console.error(`[${event.sampleName}] Failed to update feed — will self-heal on next event:`, err)
     }
 }

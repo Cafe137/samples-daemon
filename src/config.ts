@@ -11,4 +11,6 @@ export const config = {
     gatewayUrl: required('GATEWAY_URL'),
     feedSignerKey: required('FEED_SIGNER_KEY'),
     feedTopic: required('FEED_TOPIC'),
+    eyePort: Number(process.env.EYE_PORT) || null,
+    eyeToken: process.env.EYE_TOKEN || null,
 }

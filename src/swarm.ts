@@ -40,6 +40,12 @@ export async function updateFeed(reference: string): Promise<void> {
     await feedWriter.uploadReference(ZERO_BATCH_ID, reference)
 }
 
+export async function downloadFeedState(): Promise<{ reference: string; state: Record<string, string> }> {
+    const { reference } = await feedWriter.downloadReference()
+    const file = await bee.downloadFile(reference)
+    return { reference: reference.toString(), state: file.data.toJSON() as Record<string, string> }
+}
+
 export async function createFeedManifest(): Promise<string> {
     const ownerAddress = signer.publicKey().address()
     const reference = await bee.createFeedManifest(ZERO_BATCH_ID, config.feedTopic, ownerAddress)
